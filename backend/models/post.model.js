@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+const mongoose= require('mongoose')
 
 const postSchema = new mongoose.Schema({
     userId: {
@@ -27,14 +27,10 @@ const postSchema = new mongoose.Schema({
     category: {
         type: String,
         default:  'uncategorized'
-    },
-
-    slug: {
-        tyupe: String,
-        required: true,
-        unique: true
     }
+
+
 },{timestamps: true});
 
 const Post = mongoose.model('Post', postSchema);
-export default Post;
+module.exports = Post;

@@ -1,0 +1,1 @@
+const {deleteOne, updated, getAll,getOne,createPost}= require('../controllers/post.controller')
