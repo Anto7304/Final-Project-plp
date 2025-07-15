@@ -2,12 +2,12 @@ const express = require('express');
 const User = require('../models/user.model')
 const bcryptjs = require ('bcryptjs')
 const jwt = require('jsonwebtoken');
-app.use(express.json());
+
 
 exports.signUp = async(req, res)=>{
     try {
         const {email, password, userName,profilePicture} = req.body;
-        if(!email || !password || !userName || userName===(' ')|| password=== (' ')|| email===(' ')||!profilePicture){
+        if(!email?.trim() || !password?.trim() || !userName?.trim() || userName===(' ')|| password=== (' ')|| email===(' ')||!profilePicture){
             return res.json({message:"Password, email,userName and profilePicture required"})
         }
     const nameExist = await User.findOne({userName})
@@ -19,9 +19,30 @@ exports.signUp = async(req, res)=>{
      }
     const hash =await bcryptjs.hash(password, 15);
 
-    const user = await User.create({email,userName,password: hash,profilePicture})
-        const token = jwt.sign({id: user._id},process.env.JWT_SECRET,{expiresIn: '1h'})
-        res.json({token})
+    const user = await User.create({
+        email:emai.trim().toLowerCase,
+        userName:userName.trim(),
+        password: hash,
+        profilePicture:profilePicture||null
+    })
+        const token = jwt.sign(
+            {id: user._id},
+            process.env.JWT_SECRET,
+            {expiresIn: '1h'}
+        )
+
+        const userResponse={
+            _id: user._id,
+            email: user.email,
+            userName: user.userName,
+            profilePicture: user.profilePicture
+        }
+
+        res.status(201).json({
+            success:true,
+            token,
+            user: userResponse
+        })
         console.log("User registered")
     } catch (error) {
         res.status(500).json({message:"Server error"})
@@ -32,9 +53,9 @@ exports.signUp = async(req, res)=>{
 exports.login = async(req, res)=>{
     try {
         const {email,password} = req.body;
-        if(!email|| !password || email===(' ')|| password===(' ')) return res.json("Wrong credentials")
+        if(!email?.trim()|| !password?.trim()|| email===(' ')|| password===(' ')) return res.json("Wrong credentials")
 
-        const user = await User.findOne({email});
+        const user = await User.findOne({email:email.trim().toLowerCase()}).select('+password');
 
         if (!user) return res.status(404).json({message:"User not found"})
 
@@ -43,8 +64,18 @@ exports.login = async(req, res)=>{
         if (!isMatch) return res.status(403).json({message: "Wrong password"});
 
         const token = jwt.sign({id: user._id},process.env.JWT_SECRET,{expiresIn: '1h'})
-        res.json({token})
-        console.log("Login successfully")
+        const userResponse={
+            _id: user._id,
+            email: user.email,
+            userName: user.userName,
+            profilePicture: user.profilePicture
+        }
+
+        res.status(201).json({
+            success:true,
+            token,
+            user: userResponse
+        })
         
     } catch (error) {
         res.status(500).json({message:"login failed"})

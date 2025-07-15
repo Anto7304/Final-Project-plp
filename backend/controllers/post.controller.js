@@ -7,12 +7,12 @@ try {
     const { content, title, image,category} = req.body;
     const userId= req.user._id;
 
-    if(!content|| !title ||!category) return res.status(403).json({message:"Content ,category and title are required"})
+    if(!content|| !title ) return res.status(400).json({message:"Content  and title are required"})
     
     const postExist = await Post.findOne({title})
     if (postExist) return res.status(406).json({message: "Already the post exist"});
 
-    const blog = await Post.create({title,image,category,content,userId});
+    const blog = await Post.create({title,image:image||null,category:category|| 'uncategorized',content,userId});
     res.status(201).json({success: true, message: blog});
     console.log('Post created successfully')
 } catch (error) {
@@ -35,9 +35,7 @@ exports.getAll = async(req,res) => {
 
 exports.getOne=async(req, res)=>{
    try {
-    const {postId}= req.params.id;
-    if(!postId) return res.status(400).json({message:"insert the postId"})
-
+    const postId = req.params.id;
     const blog = await Post.findById(postId).populate('userId', 'userName email');
     if(!blog) return res.status(404).json({message:"No bpost to be fetched"});
      res.status(200).json({success: true, message: blog});
@@ -51,8 +49,10 @@ exports.getOne=async(req, res)=>{
 
 exports.updated= async(req, res)=>{
     try {
-        const {postId} = req.params.id
-        const {title,content,image,category} = req.body
+        const postId = req.params.id;
+        const {title,content,image,category} = req.body;
+        const userId = req.user._id;
+        const userRole = req.user.role;
 
         if(!postId) return res.status(400).json({message: "postId required"});
 
@@ -60,33 +60,42 @@ exports.updated= async(req, res)=>{
 
         if (!postExist) return res.status(404).json({message: "No such post that exist in the database"})
         
-        const updatedPost = await Post.findByIdAndUpdate(postId, {title,content,image,category},({
-            new: true,
-            runValidators: true,
-        })).populate('userId', 'userName email');
+            if(postExist.userId.toString()!== userId.toString()&& userRole!=='admin')return res.status(403),json({message: " you must be an admin"})
+       
+       
+                post.content= content || post.content;
+                post.title= title||user.title;
+                post.image= image||post.image;
+                post.category= category|| post.category;
+
+          
+                const updatedPost = await postExist.save();
 
         if(!updatedPost) return res.status(500).json("not updated");
-        res.status(201).json({success: true, message: updatedPost});
+        res.status(201).json({success: true, data: updatedPost});
 
-        console.log("Updated successfully");
-
-
-
+            console.log("Updated successfully");
     } catch (error) {
-        res.status(500).json('Not able to update');
+        res.status(500).json({messsage:'Not able to update'});
         console.error('updating failed', error.message)
     }
 }
 
 exports.deleteOne= async(req, res) => {
     try {
-        const {postId} = req.params.id;
-        
+        const postId = req.params.id;
+        const userId= req.user._id;
+        const userRole =req.user.role;
+
         if(!postId) return res.status(405).json({message: "input the postId"});
 
-        const deleted = await Post.findByIdAndDelete(postId);
-        if(!deleted) return res.status(400).json({message:"post Not deleted"});
-        res.status(200).json("Post Deleted successfully");
+        const post= await Post.findById(postId);
+        if(!post) return res.status(400).json({message:"post Not deleted"});
+       
+
+        if(post.userId.toString()!== userId.toString()&& userRole!=='admin') return res.status(403).json({message: "YUou unauthorized"})
+            await post.deleteOne();
+        res.status(200).json({message: "post deleted successfully"})
         console.log("post deleted")
     } catch (error) {
         res.status(500).json("not abble to delete")
