@@ -14,7 +14,7 @@ const postSchema = new mongoose.Schema({
 
     title: {
         type: String,
-        requied: true,
+        required: true,
         trim:  true,
         unique: true
     },
@@ -27,7 +27,19 @@ const postSchema = new mongoose.Schema({
     category: {
         type: String,
         default:  'uncategorized'
-    }
+    },
+
+    slug: {
+        type: String,
+        unique: true,
+        required: true
+    },
+
+    flags: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: []
+    }]
 
 
 },{timestamps: true});

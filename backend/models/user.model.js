@@ -30,6 +30,12 @@ const mongoose = require('mongoose');
     type: String,
     enum: ['user','admin'],
     default: 'user'
+   },
+
+   status: {
+    type: String,
+    enum: ['active', 'suspended'],
+    default: 'active'
    }
  },{timestamps: true})
 

@@ -1,38 +1,40 @@
 const express = require('express');
 const User = require('../models/user.model'); 
+const { logger, auditLogger } = require('../utils/logger'); // Use auditLogger for sensitive actions
+const bcryptjs = require('bcryptjs');
 
 exports.getMe = async (req, res)=>{
     try {
         const userId = req.user.id
         const user = await User.findById(userId).select('-password');
 
-        if (!user) return res.status(404).json({message: "User not found"})
+        if (!user) return res.status(404).json({ success: false, message: "User not found" })
 
-            res.status(200).json({message: user});
-            console.log("user found")
+        res.status(200).json({ success: true, message: user });
+        logger.info(`User profile fetched: ${user.email}`);
     } catch (error) {
-        res.status(500).json('cannot find user');
-        console.error("cannot fing a user",error)
+        logger.error(`Cannot find user: ${error.message}`);
+        res.status(500).json({ success: false, message: 'Cannot find user' });
     }
 }
 
 exports.updateProfile = async (req, res)=>{
     try {
         const {userName, email, profilePicture} = req.body;
-        userId= req.use.id;
+        const userId = req.user.id;
 
         const user = await User.findById(userId);
 
-        if(!user) return res.status(404).json({message:"No such profile like that"})
+        if(!user) return res.status(404).json({ success: false, message: "No such profile like that" })
 
         if (email && email !== user.email){
             const exist = await User.findOne({email});
-            if (exist)  return res.status(400).json({message:"email already in use"})
+            if (exist)  return res.status(409).json({ success: false, message: "Email already in use" })
         }
 
-        if (userName && userName !== user.user.userName){
+        if (userName && userName !== user.userName){
             const exist = await User.findOne({userName});
-            if (exist)  return res.status(406).json({message:"userName already in use"})
+            if (exist)  return res.status(409).json({ success: false, message: "Username already in use" })
         }
 
         // updating the fields
@@ -41,39 +43,44 @@ exports.updateProfile = async (req, res)=>{
         user.profilePicture= profilePicture || user.profilePicture;
 
         const updatedUser = await user.save();
+        updatedUser.password = undefined;
 
-        updatedUser.password = undefined;// to prevent the password to appear in response
-
-        res.status(201).json({success: true, message:updatedUser});
-        console.log("User updated profile")
+        res.status(200).json({ success: true, user: updatedUser });
+        logger.info(`User updated profile: ${user.email}`);
+        auditLogger.info({ action: 'updateProfile', userId: userId, updatedFields: { userName, email, profilePicture } });
     } catch (error) {
-        res.status(401).json({message: "cannot update profile"});
-        console.error("user not updated",error.message)
+        logger.error(`User not updated: ${error.message}`);
+        res.status(500).json({ success: false, message: "Cannot update profile" });
     }
 }
 
 exports.deleteAccount = async (req, res) =>{
     try {
         const userId = req.user.id; 
-         const user= await User.findById(userId);
+        const user= await User.findById(userId);
 
-         if (!user) return res.status(404).json({message:"User not found"});
-        
-         await user.deleteOne();
-         res.status(200).json({message: "User deleted"})
+        if (!user) return res.status(404).json({ success: false, message: "User not found" });
+        await user.deleteOne();
+        res.status(200).json({ success: true, message: "User deleted" })
+        logger.info(`User deleted: ${user.email}`);
+        auditLogger.info({ action: 'deleteAccount', userId });
     } catch (error) {
-        res.status(406).json("cannot delete")
+        logger.error(`Cannot delete user: ${error.message}`);
+        res.status(500).json({ success: false, message: "Cannot delete user" });
     }
 }
 
 exports.getAllUser= async (req,res)=>{
     try {
-        if(req.user.role !=='admin') return res.status(401).json({message:"you are not Admin"});
+        if(req.user.role !=='admin') return res.status(403).json({ success: false, message: "You are not Admin" });
 
         const users = await User.find().select('-password')
-        res.status(200).json({success: true, message:users, count: users.length})
+        res.status(200).json({ success: true, message: users, count: users.length })
+        logger.info(`All users fetched by admin: ${req.user.id}`);
+        auditLogger.info({ action: 'getAllUser', adminId: req.user.id });
     } catch (error) {
-        res.status(401).json({message:"you must be an admin to view all users"})
+        logger.error(`Admin failed to fetch users: ${error.message}`);
+        res.status(500).json({ success: false, message: "You must be an admin to view all users" })
     }
 }
 
@@ -82,14 +89,55 @@ exports.updateUserRole = async(req,res)=>{
         const {id}= req.params;
         const{role} = req.body;
     
-        if (!role || !['user', 'admin'].includes(role)) return res.status(401).json({message: "Valid role is required"})
-             if (req.user.role !== 'admin') return res.status(401).json({message:"you must be an asmin to update roles"});
+        if (!role || !['user', 'admin'].includes(role)) return res.status(400).json({ success: false, message: "Valid role is required" })
+        if (req.user.role !== 'admin') return res.status(403).json({ success: false, message: "You must be an admin to update roles" });
 
         const user = await User.findByIdAndUpdate(id,{role},{new: true, runValidators:true}).select('-password');
 
-        if (!user) return res.status(404).json({message: "User not found"})
-            res.status(200).json({message: user})
+        if (!user) return res.status(404).json({ success: false, message: "User not found" })
+        res.status(200).json({ success: true, user })
+        logger.info(`User role updated: ${user.email} to ${role}`);
+        auditLogger.info({ action: 'updateUserRole', adminId: req.user.id, targetUserId: id, newRole: role });
     } catch (error) {
-        res.status(500).json({message: "cannot update"})
+        logger.error(`Cannot update user role: ${error.message}`);
+        res.status(500).json({ success: false, message: "Cannot update user role" })
+    }
+}
+
+exports.updateUserStatus = async(req,res)=>{
+    try {
+        const {id}= req.params;
+        const{status} = req.body;
+    
+        if (!status || !['active', 'suspended'].includes(status)) return res.status(400).json({ success: false, message: "Valid status is required" })
+        if (req.user.role !== 'admin') return res.status(403).json({ success: false, message: "You must be an admin to update status" });
+
+        const user = await User.findByIdAndUpdate(id,{status},{new: true, runValidators:true}).select('-password');
+
+        if (!user) return res.status(404).json({ success: false, message: "User not found" })
+        res.status(200).json({ success: true, user })
+        logger.info(`User status updated: ${user.email} to ${status}`);
+        auditLogger.info({ action: 'updateUserStatus', adminId: req.user.id, targetUserId: id, newStatus: status });
+    } catch (error) {
+        logger.error(`Cannot update user status: ${error.message}`);
+        res.status(500).json({ success: false, message: "Cannot update user status" })
+    }
+}
+
+exports.resetUserPassword = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { password } = req.body;
+        if (!password || password.length < 6) return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
+        if (req.user.role !== 'admin') return res.status(403).json({ success: false, message: "You must be an admin to reset passwords" });
+        const hash = await bcryptjs.hash(password, 15);
+        const user = await User.findByIdAndUpdate(id, { password: hash }, { new: true, runValidators: true }).select('-password');
+        if (!user) return res.status(404).json({ success: false, message: "User not found" });
+        res.status(200).json({ success: true, user });
+        logger.info(`User password reset: ${user.email}`);
+        auditLogger.info({ action: 'resetUserPassword', adminId: req.user.id, targetUserId: id });
+    } catch (error) {
+        logger.error(`Cannot reset user password: ${error.message}`);
+        res.status(500).json({ success: false, message: "Cannot reset user password" });
     }
 }

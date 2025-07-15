@@ -1,104 +1,153 @@
 const express= require('express');
 const Post = require('../models/post.model');
-
+const { logger, auditLogger } = require('../utils/logger'); // Use auditLogger for sensitive actions
 
 exports.createPost= async(req,res)=>{
-try {
-    const { content, title, image,category} = req.body;
-    const userId= req.user._id;
+    try {
+        const { content, title, image,category} = req.body;
+        const userId= req.user.id;
 
-    if(!content|| !title ) return res.status(400).json({message:"Content  and title are required"})
-    
-    const postExist = await Post.findOne({title})
-    if (postExist) return res.status(406).json({message: "Already the post exist"});
+        // Generate slug from title
+        const slugify = (str) => str
+          .toString()
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, '-')           // Replace spaces with -
+          .replace(/&/g, '-and-')          // Replace & with 'and'
+          .replace(/[^\w\-]+/g, '')       // Remove all non-word chars
+          .replace(/--+/g, '-')            // Replace multiple - with single -
+          .replace(/^-+/, '')              // Trim - from start of text
+          .replace(/-+$/, '');             // Trim - from end of text
+        const slug = slugify(title);
 
-    const blog = await Post.create({title,image:image||null,category:category|| 'uncategorized',content,userId});
-    res.status(201).json({success: true, message: blog});
-    console.log('Post created successfully')
-} catch (error) {
-    res.status(405).json({message:"post not created"});
-    console.error("failed to create",error.message)
+        if(!content|| !title ) return res.status(400).json({ success: false, message: "Content and title are required" })
+        
+        const postExist = await Post.findOne({title})
+        if (postExist) return res.status(409).json({ success: false, message: "Post with this title already exists" });
+
+        const blog = await Post.create({title,image:image||null,category:category|| 'uncategorized',content,userId, slug});
+        res.status(201).json({ success: true, post: blog });
+        logger.info(`Post created: ${blog._id}`);
+        auditLogger.info({ action: 'createPost', userId, postId: blog._id });
+    } catch (error) {
+        logger.error(`Failed to create post: ${error.message}`);
+        res.status(500).json({ success: false, message: "Post not created" });
+    }
 }
 
-}
 exports.getAll = async(req,res) => {
     try {
-        const blogs = await Post.find().populate('userId', 'userName email').sort({ createdAt: -1 }); // Newest first
-        if(!blogs) return res.status(404).json({message:"No post found"});
-        res.status(200).json({success: true,message: blogs})
-        console.log("All blogs have been fetched")
+        const blogs = await Post.find().populate('userId', 'userName email').sort({ createdAt: -1 });
+        if(!blogs || blogs.length === 0) return res.status(404).json({ success: false, message: "No posts found" });
+        res.status(200).json({ success: true, message: blogs })
+        logger.info("All posts fetched");
     } catch (error) {
-        res.status(404).json({message:"no post have been fetched"});
-        console.error("failed to fetch",error.message)
+        logger.error(`Failed to fetch posts: ${error.message}`);
+        res.status(500).json({ success: false, message: "No posts have been fetched" });
     }
 }
 
 exports.getOne=async(req, res)=>{
-   try {
-    const postId = req.params.id;
-    const blog = await Post.findById(postId).populate('userId', 'userName email');
-    if(!blog) return res.status(404).json({message:"No bpost to be fetched"});
-     res.status(200).json({success: true, message: blog});
-     console.log("One post fetched")
-   } catch (error) {
-        res.status(400).json({message: "not able to fetch"});
-        console.error("no post was fetched", error.message)
-   }
-    
+    try {
+        const postId = req.params.id;
+        const blog = await Post.findById(postId).populate('userId', 'userName email');
+        if(!blog) return res.status(404).json({ success: false, message: "No post found" });
+        res.status(200).json({ success: true, post: blog });
+        logger.info(`Post fetched: ${postId}`);
+    } catch (error) {
+        logger.error(`Failed to fetch post: ${error.message}`);
+        res.status(500).json({ success: false, message: "Not able to fetch post" });
+    }
 }
 
 exports.updated= async(req, res)=>{
     try {
         const postId = req.params.id;
         const {title,content,image,category} = req.body;
-        const userId = req.user._id;
+        const userId = req.user.id;
         const userRole = req.user.role;
 
-        if(!postId) return res.status(400).json({message: "postId required"});
+        if(!postId) return res.status(400).json({ success: false, message: "postId required" });
 
         const postExist=  await Post.findById(postId);
 
-        if (!postExist) return res.status(404).json({message: "No such post that exist in the database"})
+        if (!postExist) return res.status(404).json({ success: false, message: "No such post exists in the database" })
         
-            if(postExist.userId.toString()!== userId.toString()&& userRole!=='admin')return res.status(403),json({message: " you must be an admin"})
-       
-       
-                post.content= content || post.content;
-                post.title= title||user.title;
-                post.image= image||post.image;
-                post.category= category|| post.category;
+        if(postExist.userId.toString()!== userId.toString() && userRole!=='admin')
+            return res.status(403).json({ success: false, message: "You are not authorized to update this post" });
 
-          
-                const updatedPost = await postExist.save();
+        postExist.content = content || postExist.content;
+        postExist.title = title || postExist.title;
+        postExist.image = image || postExist.image;
+        postExist.category = category || postExist.category;
 
-        if(!updatedPost) return res.status(500).json("not updated");
-        res.status(201).json({success: true, data: updatedPost});
-
-            console.log("Updated successfully");
+        const updatedPost = await postExist.save();
+        if(!updatedPost) return res.status(500).json({ success: false, message: "Post not updated" });
+        res.status(200).json({ success: true, post: updatedPost });
+        logger.info(`Post updated: ${postId}`);
+        auditLogger.info({ action: 'updatePost', userId, postId });
     } catch (error) {
-        res.status(500).json({messsage:'Not able to update'});
-        console.error('updating failed', error.message)
+        logger.error(`Failed to update post: ${error.message}`);
+        res.status(500).json({ success: false, message: 'Not able to update post' });
     }
 }
 
 exports.deleteOne= async(req, res) => {
     try {
         const postId = req.params.id;
-        const userId= req.user._id;
+        const userId= req.user.id;
         const userRole =req.user.role;
 
-        if(!postId) return res.status(405).json({message: "input the postId"});
+        if(!postId) return res.status(400).json({ success: false, message: "postId required" });
 
         const post= await Post.findById(postId);
-        if(!post) return res.status(400).json({message:"post Not deleted"});
-       
+        if(!post) return res.status(404).json({ success: false, message: "Post not found" });
 
-        if(post.userId.toString()!== userId.toString()&& userRole!=='admin') return res.status(403).json({message: "YUou unauthorized"})
-            await post.deleteOne();
-        res.status(200).json({message: "post deleted successfully"})
-        console.log("post deleted")
+        if(post.userId.toString()!== userId.toString()&& userRole!=='admin') return res.status(403).json({ success: false, message: "You are not authorized to delete this post" })
+        await post.deleteOne();
+        res.status(200).json({ success: true, message: "Post deleted successfully" })
+        logger.info(`Post deleted: ${postId}`);
+        auditLogger.info({ action: 'deletePost', userId, postId });
     } catch (error) {
-        res.status(500).json("not abble to delete")
-        console.error("Not able to delete", error.message)
+        logger.error(`Failed to delete post: ${error.message}`);
+        res.status(500).json({ success: false, message: "Not able to delete post" })
     }
 }
+
+exports.flagPost = async (req, res) => {
+    try {
+        const postId = req.params.id;
+        const userId = req.user.id;
+        const post = await Post.findById(postId);
+        if (!post) return res.status(404).json({ success: false, message: 'Post not found' });
+        if (post.flags.includes(userId)) return res.status(400).json({ success: false, message: 'Already flagged' });
+        post.flags.push(userId);
+        await post.save();
+        res.status(200).json({ success: true, message: 'Post flagged' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to flag post' });
+    }
+};
+
+exports.unflagPost = async (req, res) => {
+    try {
+        const postId = req.params.id;
+        const userId = req.user.id;
+        const post = await Post.findById(postId);
+        if (!post) return res.status(404).json({ success: false, message: 'Post not found' });
+        post.flags = post.flags.filter(id => id.toString() !== userId.toString());
+        await post.save();
+        res.status(200).json({ success: true, message: 'Post unflagged' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to unflag post' });
+    }
+};
+
+exports.getFlaggedPosts = async (req, res) => {
+    try {
+        const posts = await Post.find({ flags: { $exists: true, $not: { $size: 0 } } }).populate('userId', 'userName email').sort({ createdAt: -1 });
+        res.status(200).json({ success: true, message: posts });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to fetch flagged posts' });
+    }
+};
