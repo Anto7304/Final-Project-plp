@@ -122,6 +122,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api', authRoutes);
 app.use('/api', userRoutes);
 app.use('/api', commentRoutes);
+app.use('/api',postRoutes)
 
 // Admin endpoint to fetch audit logs
 app.get('/api/audit-logs', protect, authorization(['admin']), (req, res) => {
