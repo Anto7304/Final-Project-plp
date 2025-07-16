@@ -60,8 +60,8 @@ exports.getOne=async(req, res)=>{
     }
 }
 
-exports.updated= async(req, res)=>{
-    try {
+exports.updated = async (req, res, next) => {
+  try {
         const postId = req.params.id;
         const {title,content,image,category} = req.body;
         const userId = req.user.id;
@@ -86,11 +86,10 @@ exports.updated= async(req, res)=>{
         res.status(200).json({ success: true, post: updatedPost });
         logger.info(`Post updated: ${postId}`);
         auditLogger.info({ action: 'updatePost', userId, postId });
-    } catch (error) {
-        logger.error(`Failed to update post: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Not able to update post' });
-    }
-}
+  } catch (err) {
+    next(err); // This will trigger the global error handler
+  }
+};
 
 exports.deleteOne= async(req, res) => {
     try {
