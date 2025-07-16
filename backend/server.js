@@ -48,9 +48,20 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // CORS: use env variable for origin in production
+const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map(origin => origin.trim());
+
 app.use(
   cors({
-    origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: ['PUT', 'GET', 'DELETE', 'POST', 'PATCH'],
     credentials: true,
   })
