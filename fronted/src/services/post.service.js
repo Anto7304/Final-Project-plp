@@ -19,6 +19,9 @@ export const updatePost = async (id, data, token) => {
 };
 
 export const deletePost = async (id, token) => {
+  if (!token || typeof token !== 'string' || token.length < 10) {
+    throw new Error('Missing or invalid authentication token. Please log in again.');
+  }
   return axios.delete(`${API}/posts/${id}`, { headers: { Authorization: `Bearer ${token}` } });
 };
 
