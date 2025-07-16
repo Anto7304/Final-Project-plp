@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API = import.meta.env.VITE_API || "http://localhost:5000/api";
 
 export const getMe = async (token) => {
   return axios.get(`${API}/me`, { headers: { Authorization: `Bearer ${token}` } });

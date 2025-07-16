@@ -156,7 +156,7 @@ CLIENT_ORIGIN=http://localhost:5173
 (Usually not needed unless you want to override Vite defaults, e.g. for API base URL.)
 
 ```
-# Example: VITE_API_URL=http://localhost:5000/api
+# Example: VITE_API=http://localhost:5000/api
 ```
 
 ---
