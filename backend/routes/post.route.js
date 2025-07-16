@@ -154,6 +154,8 @@ const {deleteOne, updated, getAll,getOne,createPost,flagPost,unflagPost,getFlagg
 const { body, validationResult } = require('express-validator');
 const { postLimiter } = require('../utils/rateLimiters');
 const mongoose = require('mongoose');
+const multer = require('multer');
+const upload = multer({ dest: 'uploads/' });
 
 const postValidation = [
   body('title').isLength({ min: 5 }).withMessage('Title must be at least 5 characters'),
@@ -180,7 +182,7 @@ const validate = (req, res, next) => {
 router.post('/posts',protect,authorization(['admin']),postLimiter,postValidation,validate,createPost);
 router.get('/posts',getAll);
 router.get('/posts/:id',protect,validateObjectId,getOne);
-router.put('/posts/:id',protect,authorization(['admin']),postLimiter,validateObjectId,postValidation,validate,updated);
+router.put('/posts/:id', protect, authorization(['admin']), postLimiter, validateObjectId, postValidation, validate, upload.single('image'), updated);
 router.delete('/posts/:id',protect,authorization(['admin']),postLimiter,validateObjectId,deleteOne);
 router.patch('/posts/:id/flag', protect, flagPost);
 router.patch('/posts/:id/unflag', protect, unflagPost);
