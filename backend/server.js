@@ -21,6 +21,8 @@ const path = require('path');
 dotenv.config();
 const app = express();
 
+app.set('trust proxy', 1);
+
 connectDB();
 app.use(express.json());
 // Only sanitize req.body to avoid Express 5 incompatibility

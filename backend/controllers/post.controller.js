@@ -62,32 +62,33 @@ exports.getOne=async(req, res)=>{
 
 exports.updated = async (req, res, next) => {
   try {
-        const postId = req.params.id;
-        const {title,content,image,category} = req.body;
-        const userId = req.user.id;
-        const userRole = req.user.role;
+    const postId = req.params.id;
+    const { title, content, image, category, slug } = req.body;
 
-        if(!postId) return res.status(400).json({ success: false, message: "postId required" });
+    const postExist = await Post.findById(postId);
+    if (!postExist) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
 
-        const postExist=  await Post.findById(postId);
+    postExist.title = title || postExist.title;
+    postExist.content = content || postExist.content;
+    postExist.image = image || postExist.image;
+    postExist.category = category || postExist.category;
+    postExist.slug = slug || postExist.slug; // Always set slug
 
-        if (!postExist) return res.status(404).json({ success: false, message: "No such post exists in the database" })
-        
-        if(postExist.userId.toString()!== userId.toString() && userRole!=='admin')
-            return res.status(403).json({ success: false, message: "You are not authorized to update this post" });
+    // If using multer for file upload:
+    if (req.file) {
+      postExist.image = req.file.path; // or whatever your image field is
+    }
 
-        postExist.content = content || postExist.content;
-        postExist.title = title || postExist.title;
-        postExist.image = image || postExist.image;
-        postExist.category = category || postExist.category;
+    const updatedPost = await postExist.save();
 
-        const updatedPost = await postExist.save();
-        if(!updatedPost) return res.status(500).json({ success: false, message: "Post not updated" });
-        res.status(200).json({ success: true, post: updatedPost });
-        logger.info(`Post updated: ${postId}`);
-        auditLogger.info({ action: 'updatePost', userId, postId });
+    logger.info(`Post updated: ${postId}`);
+    auditLogger.info({ action: 'updatePost', userId: req.user.id, postId });
+
+    res.status(200).json({ success: true, post: updatedPost });
   } catch (err) {
-    next(err); // This will trigger the global error handler
+    next(err);
   }
 };
 
